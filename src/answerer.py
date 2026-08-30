@@ -63,7 +63,7 @@ class Answerer:
         folder_id,
         model=None,
         temperature=0.2,
-        max_tokens=2000,
+        max_tokens=10000,
         timeout=120,
         attempts=3,
     ):
