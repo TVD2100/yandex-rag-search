@@ -41,6 +41,13 @@
 
 ## Установка
 
+Скачать с GitHub:
+
+```bash
+git clone https://github.com/TVD2100/yandex-rag-search.git
+cd yandex-rag-search
+```
+
 Требуется Python 3.10+.
 
 ```bash
