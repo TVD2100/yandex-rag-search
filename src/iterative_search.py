@@ -131,7 +131,7 @@ class IterativeSearch:
     max_iterations : int, cap for search rounds (default 10).
     top_n : int, chunks retrieved per query (default 10).
     max_chunks : int, chunks passed to the final fallback prompt (default 10).
-    temperature, timeout, attempts : generation parameters.
+    temperature, max_tokens, timeout, attempts : generation parameters.
     """
 
     def __init__(
@@ -144,6 +144,7 @@ class IterativeSearch:
         top_n=10,
         max_chunks=10,
         temperature=0.2,
+        max_tokens=10000,
         timeout=120,
         attempts=3,
         reasoning_effort=None,
@@ -156,11 +157,12 @@ class IterativeSearch:
         self.top_n = top_n
         self.max_chunks = max_chunks
         self.temperature = temperature
+        self.max_tokens = max_tokens
         self.timeout = timeout
         self.attempts = attempts
         self.reasoning_effort = reasoning_effort
 
-    def _call_llm(self, messages, tools=None, max_tokens=2000):
+    def _call_llm(self, messages, tools=None, max_tokens=10000):
         """Single chat-completions call.
 
         Returns (content, raw_tool_calls) where content is the assistant text
@@ -224,7 +226,7 @@ class IterativeSearch:
             "{context}", self._context_text(chunks[: self.max_chunks])
         )
         text, _ = self._call_llm(
-            [{"role": "user", "content": prompt}], max_tokens=2000
+            [{"role": "user", "content": prompt}], max_tokens=self.max_tokens
         )
         if text is None:
             return {"text": NOT_FOUND_TEXT, "citations": [], "fallback": True}
@@ -266,7 +268,7 @@ class IterativeSearch:
 
         for iteration in range(1, self.max_iterations + 1):
             content, raw_calls = self._call_llm(
-                messages, tools=[SEARCH_TOOL], max_tokens=2000
+                messages, tools=[SEARCH_TOOL], max_tokens=self.max_tokens
             )
             if content is None and not raw_calls:
                 final_result = {
