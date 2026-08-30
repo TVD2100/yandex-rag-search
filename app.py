@@ -84,6 +84,7 @@ def get_searcher(api_key, folder_id, settings, db_path):
         top_n=settings["top_n"],
         max_chunks=settings["max_chunks"],
         temperature=settings["temperature"],
+        max_tokens=settings["max_tokens"],
         reasoning_effort=settings["reasoning_effort"],
     )
 
@@ -161,7 +162,7 @@ def render_iterations(iterations):
 
 
 def render_settings_page():
-    """Settings form: model, reasoning, iterations, top_n, max_chunks, temperature, debug."""
+    """Settings form: model, reasoning, iterations, top_n, max_chunks, temperature, max_tokens, debug."""
     st.header("Настройки")
     settings = load_settings()
 
@@ -184,6 +185,7 @@ def render_settings_page():
         top_n = st.slider("Фрагментов на запрос (3-20)", 3, 20, settings["top_n"])
         max_chunks = st.slider("Максимум фрагментов в контексте (3-20)", 3, 20, settings["max_chunks"])
         temperature = st.slider("Температура (0.0-1.0)", 0.0, 1.0, settings["temperature"], 0.05)
+        max_tokens = st.slider("Максимум токенов ответа (500-10000)", 500, 10000, settings["max_tokens"], 100)
         show_debug = st.checkbox("Показывать служебную информацию", settings["show_debug"])
         submitted = st.form_submit_button("Сохранить")
 
@@ -196,6 +198,7 @@ def render_settings_page():
             "top_n": top_n,
             "max_chunks": max_chunks,
             "temperature": temperature,
+            "max_tokens": max_tokens,
             "show_debug": show_debug,
         }
         save_settings(new_settings)
