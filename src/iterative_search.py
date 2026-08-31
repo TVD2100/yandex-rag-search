@@ -55,6 +55,15 @@ FINAL_ANSWER_PROMPT = (
     'Вопрос: {question}\n\nФрагменты документации:\n\n{context}'
 )
 
+FINAL_ITERATION_PROMPT = (
+    'Это последняя итерация поиска. У тебя больше нет возможности вызывать '
+    'search_rag. Сформируй итоговый ответ на основе ВСЕХ предоставленных '
+    'фрагментов документации. Каждый содержательный факт помечай ссылкой '
+    '[#<id>] сразу после предложения, к которому он относится. '
+    'Если в предоставленных фрагментах нет ответа на вопрос, напиши ровно: '
+    'Не найдено в документации.'
+)
+
 SEARCH_TOOL = {
     "type": "function",
     "function": {
@@ -133,7 +142,7 @@ class IterativeSearch:
     max_chunks : int, chunks passed to the final fallback prompt (default 15).
         Chunks kept by the model via keep_chunk_ids are always included;
         the remaining slots are filled by relevance score.
-    temperature, max_tokens, timeout, attempts : generation parameters.
+    temperature, timeout, attempts : generation parameters.
     """
 
     def __init__(
@@ -274,6 +283,10 @@ class IterativeSearch:
         - iterations: [{"iteration", "queries", "keep_ids", "new_ids",
           "accumulated_ids"}]
         - sufficient: bool (True when the LLM produced the final answer)
+
+        On the last iteration, if the model still requests a search, the new
+        chunks are appended and the model is forced to produce the final
+        answer without further tool calls.
         """
         messages = [
             {"role": "system", "content": SYSTEM_PROMPT},
@@ -366,6 +379,38 @@ class IterativeSearch:
                     )
                 )
                 messages.append({"role": "user", "content": results_text})
+
+                if iteration == self.max_iterations:
+                    # Last iteration: force the final answer without tools.
+                    messages.append(
+                        {"role": "user", "content": FINAL_ITERATION_PROMPT}
+                    )
+                    content, raw_calls = self._call_llm(
+                        messages, tools=None, max_tokens=self.max_tokens
+                    )
+                    if content is None:
+                        final_result = {
+                            "text": NOT_FOUND_TEXT,
+                            "citations": [],
+                            "fallback": True,
+                        }
+                    else:
+                        sufficient = True
+                        cited_ids = parse_cited_ids(content)
+                        cited = []
+                        for cid in cited_ids:
+                            chunk = next(
+                                (c for c in shown if c["id"] == cid), None
+                            )
+                            if chunk is not None and chunk not in cited:
+                                cited.append(chunk)
+                        final_result = {
+                            "text": content,
+                            "citations": cited,
+                            "fallback": False,
+                        }
+                    break
+
                 continue
 
             # The model produced a text answer.
