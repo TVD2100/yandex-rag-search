@@ -130,8 +130,9 @@ class IterativeSearch:
         Model URI for the LLM (default deepseek-v4-flash).
     max_iterations : int, cap for search rounds (default 10).
     top_n : int, chunks retrieved per query (default 10).
-    max_chunks : int, chunks passed to the final fallback prompt (default 15),
-        ranked by best relevance score before the cap is applied.
+    max_chunks : int, chunks passed to the final fallback prompt (default 15).
+        Chunks kept by the model via keep_chunk_ids are always included;
+        the remaining slots are filled by relevance score.
     temperature, max_tokens, timeout, attempts : generation parameters.
     """
 
@@ -225,15 +226,23 @@ class IterativeSearch:
     def _answer_from_chunks(self, question, chunks):
         """Generate a final answer from chunks without tools (fallback path).
 
+        Chunks marked as kept (selected by the model via keep_chunk_ids) are
+        always included in the prompt; the remaining slots up to max_chunks
+        are filled from the other chunks ranked by relevance score.
+
         Returns {"text", "citations": [chunk dicts], "fallback": bool}.
         """
         if not chunks:
             return {"text": NOT_FOUND_TEXT, "citations": [], "fallback": False}
-        ranked = sorted(
-            chunks, key=lambda c: c.get("score", 0.0), reverse=True
+        kept = [c for c in chunks if c.get("kept")]
+        rest = sorted(
+            [c for c in chunks if not c.get("kept")],
+            key=lambda c: c.get("score", 0.0),
+            reverse=True,
         )
+        selected = kept + rest[: max(0, self.max_chunks - len(kept))]
         prompt = FINAL_ANSWER_PROMPT.replace("{question}", question).replace(
-            "{context}", self._context_text(ranked[: self.max_chunks])
+            "{context}", self._context_text(selected)
         )
         text, _ = self._call_llm(
             [{"role": "user", "content": prompt}], max_tokens=self.max_tokens
@@ -322,7 +331,13 @@ class IterativeSearch:
 
                 if keep_ids:
                     keep_set = set(keep_ids)
-                    accumulated = [c for c in shown if c["id"] in keep_set]
+                    accumulated = []
+                    for c in shown:
+                        if c["id"] in keep_set:
+                            if not c.get("kept"):
+                                c = dict(c)
+                                c["kept"] = True
+                            accumulated.append(c)
 
                 acc_ids = {c["id"] for c in accumulated}
                 new_chunks = [c for c in new_chunks if c["id"] not in acc_ids]
