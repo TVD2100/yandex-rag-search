@@ -41,7 +41,7 @@ DEFAULT_SETTINGS = {
     "reasoning_effort": "high",
     "max_iterations": 7,
     "top_n": 10,
-    "max_chunks": 10,
+    "max_chunks": 15,
     "temperature": 0.2,
     "max_tokens": 10000,
     "show_debug": False,
