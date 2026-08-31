@@ -130,7 +130,8 @@ class IterativeSearch:
         Model URI for the LLM (default deepseek-v4-flash).
     max_iterations : int, cap for search rounds (default 10).
     top_n : int, chunks retrieved per query (default 10).
-    max_chunks : int, chunks passed to the final fallback prompt (default 10).
+    max_chunks : int, chunks passed to the final fallback prompt (default 15),
+        ranked by best relevance score before the cap is applied.
     temperature, max_tokens, timeout, attempts : generation parameters.
     """
 
@@ -142,7 +143,7 @@ class IterativeSearch:
         model=None,
         max_iterations=10,
         top_n=10,
-        max_chunks=10,
+        max_chunks=15,
         temperature=0.2,
         max_tokens=10000,
         timeout=120,
@@ -202,12 +203,18 @@ class IterativeSearch:
         return None, None
 
     def _search(self, query):
-        """Return ordered chunk dicts for one query (vector search)."""
+        """Return ordered chunk dicts for one query (vector search).
+
+        Each chunk dict is copied and augmented with a 'score' field holding
+        the cosine similarity from this search round.
+        """
         ranked = self.retriever.search_vector(query, top_n=self.top_n)
         chunks = []
-        for cid, _ in ranked:
+        for cid, score in ranked:
             chunk = self.retriever.by_id.get(cid)
             if chunk is not None:
+                chunk = dict(chunk)
+                chunk["score"] = score
                 chunks.append(chunk)
         return chunks
 
@@ -222,8 +229,11 @@ class IterativeSearch:
         """
         if not chunks:
             return {"text": NOT_FOUND_TEXT, "citations": [], "fallback": False}
+        ranked = sorted(
+            chunks, key=lambda c: c.get("score", 0.0), reverse=True
+        )
         prompt = FINAL_ANSWER_PROMPT.replace("{question}", question).replace(
-            "{context}", self._context_text(chunks[: self.max_chunks])
+            "{context}", self._context_text(ranked[: self.max_chunks])
         )
         text, _ = self._call_llm(
             [{"role": "user", "content": prompt}], max_tokens=self.max_tokens
